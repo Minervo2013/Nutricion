@@ -2,7 +2,7 @@
   "name": "Registro Nutricional",
   "short_name": "Nutrición",
   "description": "Registro semanal de comidas",
-  "start_url": "./Registro semanal.html",
+  "start_url": "./registro-semanal.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#edf7f0",
