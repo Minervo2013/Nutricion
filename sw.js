@@ -1,5 +1,5 @@
 const CACHE = 'nutricion-v1';
-const FILES = ['./Registro semanal.html', './manifest.json', './icon.png'];
+const FILES = ['./index.html', './manifest.json', './icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES).catch(() => {})));
