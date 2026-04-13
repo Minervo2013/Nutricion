@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^\"C:/Users/Servidor IT/AppData/Local/Programs/Python/Python314/python\\.exe\" -c \"\nimport pdfplumber\npdf = pdfplumber\\.open\\(r'c:\\\\Users\\\\Servidor IT\\\\Downloads\\\\REGISTRO SEMANAL \\(2\\)\\.pdf'\\)\nprint\\('Pages:', len\\(pdf\\.pages\\)\\)\nfor i, p in enumerate\\(pdf\\.pages\\):\n    print\\(f'Pag \\{i\\+1\\}: \\{p\\.width:\\.1f\\}x\\{p\\.height:\\.1f\\} pts'\\)\n    words = p\\.extract_words\\(\\)\n    print\\(f'  Total words: \\{len\\(words\\)\\}'\\)\n    for w in words\\[:80\\]:\n        print\\(f'    \\[\\{w\\[\\\\\"x0\\\\\"\\]:\\.0f\\},\\{w\\[\\\\\"top\\\\\"\\]:\\.0f\\}\\] \\\\\"\\{w\\[\\\\\"text\\\\\"\\]\\}\\\\\"'\\)\n    print\\(\\)\n\"\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
