@@ -1,0 +1,153 @@
+698:
+699:function exportPDF() {
+700:  document.getElementById('overlay').classList.add('visible');
+701:  if (typeof window.PDFLib === 'undefined') {
+702:    const s = document.createElement('script');
+703:    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+704:    s.onload  = () => doFillTemplate();
+705:    s.onerror = () => { document.getElementById('overlay').classList.remove('visible'); showToast('Error: sin conexión'); };
+706:    document.head.appendChild(s);
+707:  } else {
+708:    doFillTemplate();
+709:  }
+710:}
+711:
+712:async function doFillTemplate() {
+713:  try {
+714:    const { PDFDocument, rgb, StandardFonts, degrees } = window.PDFLib;
+715:
+716:    // Load blank template and copy page 0 (portrait 595×842)
+717:    const tplBytes = Uint8Array.from(atob(TEMPLATE_B64), c => c.charCodeAt(0));
+718:    const tplDoc   = await PDFDocument.load(tplBytes);
+719:    const outDoc   = await PDFDocument.create();
+720:    const [tplPage] = await outDoc.copyPages(tplDoc, [0]);
+721:    outDoc.addPage(tplPage);
+722:    const page = outDoc.getPages()[0];
+723:
+724:    // Rotate page for landscape display (/Rotate 90 = 90° CCW visual rotation)
+725:    // Transform: portrait_x = pymupdf_y, portrait_y = pymupdf_x
+726:    page.setRotation(degrees(90));
+727:
+728:    const font  = await outDoc.embedFont(StandardFonts.Helvetica);
+729:    const fontB = await outDoc.embedFont(StandardFonts.HelveticaBold);
+730:    const BLACK = rgb(0.08, 0.08, 0.08);
+731:    const DGRAY = rgb(0.22, 0.22, 0.22);
+732:    const BLUE  = rgb(0.1,  0.3,  0.7);
+733:
+734:    // Draw text in landscape at position (ls_x, ls_y_pmu):
+735:    //   portrait_x = ls_y_pmu  (row = vertical pos in landscape, top-down)
+736:    //   portrait_y = ls_x      (column = horizontal pos in landscape, left)
+737:    //   rotate: degrees(90)    → characters flow rightward in landscape
+738:    const put = (text, ls_x, ls_y_pmu, size, fnt, col) => {
+739:      if (!text) return;
+740:      page.drawText(text, {
+741:        x: ls_y_pmu,
+742:        y: ls_x,
+743:        size: size || 6.5,
+744:        font: fnt  || font,
+745:        color: col || DGRAY,
+746:        rotate: degrees(90),
+747:      });
+748:    };
+749:
+750:    // Wrap text to fit column width (in landscape x direction = portrait y span)
+751:    const wrap = (text, size, maxW) => {
+752:      const words = text.split(/\s+/);
+753:      const lines = []; let cur = '';
+754:      for (const w of words) {
+755:        const t = cur ? cur + ' ' + w : w;
+756:        try {
+757:          if (font.widthOfTextAtSize(t, size) <= maxW) { cur = t; }
+758:          else { if (cur) lines.push(cur); cur = w; }
+759:        } catch { cur = t; }
+760:      }
+761:      if (cur) lines.push(cur);
+762:      return lines;
+763:    };
+764:
+765:    // ── Week header ──────────────────────────────────────────────────────────
+766:    const ws = new Date(weekStart);
+767:    const we = new Date(ws); we.setDate(we.getDate() + 6);
+768:    const fmtD = d => `${d.getDate()}/${d.getMonth()+1}`;
+769:    const weekStr = `${fmtD(ws)} al ${fmtD(we)}`;
+770:
+771:    // Header area: landscape x≈30-100, y≈15-65 (pymupdf)
+772:    // "Semana:" label is at portrait coords x≈37‒55, y≈78 (from blank template analysis)
+773:    // Write week tag just after the "Semana:" label area
+774:    put(loadName(),       100, 17, 12, fontB, DGRAY);
+775:    put(weekStr,          100, 34, 12, fontB, BLUE);
+776:
+777:    // ── Day rows ─────────────────────────────────────────────────────────────
+778:    for (let di = 0; di < 7; di++) {
+779:      const d    = getDayDate(di);
+780:      const key  = getDayKey(di);
+781:      const data = getDayData(key);
+782:      const cx   = LS_COLS[di];
+783:
+784:      // Date — centered in column, size 10, bold, without '/'
+785:      // To move UP/DOWN: change LS_ROW.date (5th number in LS_ROW)
+786:      // To move LEFT/RIGHT: the centering is automatic; shift with +/- on cx
+787:      const _dayStr  = `${d.getDate()}`;
+788:      const _dateW   = fontB.widthOfTextAtSize(_dayStr, 10);
+789:      const _dateCX  = cx + (LS_COL_W - _dateW) / 2 - 13;   // auto-center (-10 = más a la izquierda)
+790:      put(_dayStr, _dateCX, LS_ROW.date + 14, 10, fontB, BLACK);
+791:
+792:      // Mes — misma altura que el día, corrido a la derecha
+793:      // Para mover a la derecha: aumentar el +20 de _monCX (ej: +25, +30)
+794:      // Para mover a la izquierda: disminuirlo (ej: +15, +10)
+795:      const _monStr  = `${d.getMonth()+1}`;
+796:      const _monCX   = _dateCX + _dateW + 20;   // ← "+20" = separación respecto al día
+797:      put(_monStr, _monCX, LS_ROW.date + 14, 10, fontB, BLACK);
+798:
+799:      // ── Meal row helper ───────────────────────────────────────────────────
+800:      // HOW TO ADJUST TEXT POSITIONS:
+801:      //   ls_x (2nd param of put) → moves text RIGHT (+) or LEFT (-)
+802:      //   ls_y_pmu (3rd param)    → moves text DOWN (+) or UP (-)
+803:      //   size (4th param)        → font size in points
+804:      //   Line spacing controlled by the 'step' variable below (points per line)
+805:      const MEAL_SIZE = 8;    // ← change font size here (try 7–10)
+806:      const MEAL_STEP = 10;   // ← change line spacing here (try 9–12)
+807:      const fillRow = (foods_arr, rowKey) => {
+808:        if (!foods_arr || !foods_arr.length) return;
+809:        const text = foods_arr.join(', ');
+810:        const h    = LS_ROW_H[rowKey];
+811:        const top  = LS_ROW[rowKey];
+812:        const maxLines = Math.floor((h - 4) / MEAL_STEP);
+813:        const lines = wrap(text, MEAL_SIZE, LS_COL_W - 4);
+814:        lines.slice(0, maxLines).forEach((line, li) => {
+815:          put(line, cx, top + 3 + li * MEAL_STEP, MEAL_SIZE, fontB, BLACK);
+816:        });
+817:      };
+818:
+819:      fillRow(data.meals?.desayuno, 'desayuno');
+820:      fillRow(data.meals?.almuerzo, 'almuerzo');
+821:      fillRow(data.meals?.merienda, 'merienda');
+822:      fillRow(data.meals?.cena,     'cena');
+823:
+824:      // Agua — size 8, bold
+825:      const w = data.water || 0;
+826:      if (w > 0) {
+827:        put(`${w}v · ${w*250}ml`, cx, LS_ROW.agua + 6, 8, fontB, BLACK);
+828:      }
+829:
+830:      // Ejercicio — size 8, bold
+831:      if (data.ejercicio) {
+832:        const ejLines   = wrap(data.ejercicio, 8, LS_COL_W - 4);
+833:        const ejMaxL    = Math.floor((LS_ROW_H.ejercicio - 4) / 10);
+834:        ejLines.slice(0, ejMaxL).forEach((line, li) => {
+835:          put(line, cx, LS_ROW.ejercicio + 3 + li * 10, 8, fontB, BLACK);
+836:        });
+837:      }
+838:    }
+839:
+840:    // ── Save & download ───────────────────────────────────────────────────────
+841:    const pdfBytes = await outDoc.save();
+842:    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+843:    const url  = URL.createObjectURL(blob);
+844:    const a    = document.createElement('a');
+845:    a.href     = url;
+846:    a.download = `RegistroNutricional_${ws.toISOString().split('T')[0]}.pdf`;
+847:    a.click();
+848:    URL.revokeObjectURL(url);
+849:
+850:    document.getElementById('overlay').classList.remove('visible');
